@@ -21,15 +21,24 @@ END pkg_agenda;
 /
 
 CREATE OR REPLACE PACKAGE BODY pkg_agenda AS
+    -- Elemento privado: solo puede ser utilizado dentro de este paquete.
+    PROCEDURE prc_validar_consulta (
+        p_doctor_id IN schedule_slots.doctor_id%TYPE,
+        p_fecha     IN schedule_slots.slot_date%TYPE
+    ) IS
+    BEGIN
+        IF p_doctor_id IS NULL OR p_fecha IS NULL THEN
+            RAISE_APPLICATION_ERROR(-20050, 'Doctor y fecha son obligatorios');
+        END IF;
+    END prc_validar_consulta;
+
     PROCEDURE prc_listar_slots_disponibles (
         p_doctor_id IN schedule_slots.doctor_id%TYPE,
         p_fecha     IN schedule_slots.slot_date%TYPE
     ) IS
         v_encontrados NUMBER := 0;
     BEGIN
-        IF p_doctor_id IS NULL OR p_fecha IS NULL THEN
-            RAISE_APPLICATION_ERROR(-20050, 'Doctor y fecha son obligatorios');
-        END IF;
+        prc_validar_consulta(p_doctor_id, p_fecha);
 
         DBMS_OUTPUT.PUT_LINE('Bloques disponibles para el doctor ' || p_doctor_id);
         DBMS_OUTPUT.PUT_LINE('Fecha: ' || TO_CHAR(p_fecha, 'DD/MM/YYYY'));
@@ -61,9 +70,7 @@ CREATE OR REPLACE PACKAGE BODY pkg_agenda AS
     ) RETURN NUMBER IS
         v_total NUMBER;
     BEGIN
-        IF p_doctor_id IS NULL OR p_fecha IS NULL THEN
-            RAISE_APPLICATION_ERROR(-20051, 'Doctor y fecha son obligatorios');
-        END IF;
+        prc_validar_consulta(p_doctor_id, p_fecha);
 
         SELECT COUNT(*)
         INTO v_total
@@ -99,6 +106,25 @@ END pkg_pacientes;
 /
 
 CREATE OR REPLACE PACKAGE BODY pkg_pacientes AS
+    -- Elemento privado: encapsula la lectura de la fecha de nacimiento.
+    FUNCTION fn_obtener_fecha_nacimiento (
+        p_user_id IN users.user_id%TYPE
+    ) RETURN user_profiles.birth_date%TYPE IS
+        v_fecha user_profiles.birth_date%TYPE;
+    BEGIN
+        SELECT up.birth_date
+        INTO v_fecha
+        FROM users u
+        INNER JOIN user_profiles up ON up.user_id = u.user_id
+        INNER JOIN patient_profiles pp ON pp.user_id = u.user_id
+        WHERE u.user_id = p_user_id;
+
+        RETURN v_fecha;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20053, 'No se encontró la ficha del paciente');
+    END fn_obtener_fecha_nacimiento;
+
     PROCEDURE prc_obtener_resumen (
         p_user_id          IN  users.user_id%TYPE,
         p_nombre_completo  OUT VARCHAR2,
@@ -124,21 +150,13 @@ CREATE OR REPLACE PACKAGE BODY pkg_pacientes AS
     ) RETURN NUMBER IS
         v_fecha_nacimiento user_profiles.birth_date%TYPE;
     BEGIN
-        SELECT up.birth_date
-        INTO v_fecha_nacimiento
-        FROM users u
-        INNER JOIN user_profiles up ON up.user_id = u.user_id
-        INNER JOIN patient_profiles pp ON pp.user_id = u.user_id
-        WHERE u.user_id = p_user_id;
+        v_fecha_nacimiento := fn_obtener_fecha_nacimiento(p_user_id);
 
         IF v_fecha_nacimiento IS NULL THEN
             RETURN NULL;
         END IF;
 
         RETURN TRUNC(MONTHS_BETWEEN(TRUNC(SYSDATE), v_fecha_nacimiento) / 12);
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RAISE_APPLICATION_ERROR(-20053, 'No se encontró la ficha del paciente');
     END fn_calcular_edad;
 END pkg_pacientes;
 /
