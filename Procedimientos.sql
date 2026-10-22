@@ -167,12 +167,7 @@ BEGIN
         p_patient_user_id, 'Registro de reserva', SYSTIMESTAMP
     );
 
-    -- 8. Marcar slot como reservado
-    UPDATE schedule_slots
-    SET slot_status = 'BOOKED',
-        appointment_id = p_appointment_id
-    WHERE schedule_slot_id = p_schedule_slot_id;
-
+    -- trg_sincronizar_slot_cita marca el slot como BOOKED tras insertar la cita.
     COMMIT;
 
 EXCEPTION
@@ -192,7 +187,6 @@ CREATE OR REPLACE PROCEDURE prc_cancelar_cita (
 IS
     v_estado     VARCHAR2(30);
     v_slot_id    NUMBER;
-    v_cancelable NUMBER;
 BEGIN
     -- 1. Obtener estado y slot de la cita
     SELECT appointment_status, schedule_slot_id
@@ -223,15 +217,6 @@ BEGIN
         p_appointment_id, p_cancelled_by_user, p_reason, SYSTIMESTAMP
     );
 
-    -- 6. Registrar historial
-    INSERT INTO appointment_status_history (
-        appointment_id, old_status, new_status,
-        changed_by_user_id, change_reason, changed_at
-    ) VALUES (
-        p_appointment_id, v_estado, 'CANCELLED',
-        p_cancelled_by_user, p_reason, SYSTIMESTAMP
-    );
-
     COMMIT;
 
 EXCEPTION
@@ -253,7 +238,6 @@ CREATE OR REPLACE PROCEDURE prc_registrar_pago (
 IS
     v_existe          NUMBER;
     v_tx_code         VARCHAR2(30);
-    v_receipt_number  VARCHAR2(30);
 BEGIN
     -- 1. Verificar que la cita exista
     SELECT COUNT(*) INTO v_existe
@@ -288,16 +272,7 @@ BEGIN
         SYSTIMESTAMP, SYSTIMESTAMP
     ) RETURNING payment_id INTO p_payment_id;
 
-    -- 5. Generar número de boleta
-    v_receipt_number := fn_generar_codigo('BOL', 6);
-
-    -- 6. Insertar recibo
-    INSERT INTO payment_receipts (
-        payment_id, receipt_number, issued_at, total_amount
-    ) VALUES (
-        p_payment_id, v_receipt_number, SYSTIMESTAMP, p_amount
-    );
-
+    -- trg_generar_recibo_automatico crea el recibo al insertar el pago PAID.
     COMMIT;
 
 EXCEPTION
@@ -400,4 +375,23 @@ EXCEPTION
         ROLLBACK;
         RAISE;
 END prc_generar_reporte_citas;
+/
+
+CREATE OR REPLACE PROCEDURE prc_mostrar_resumen_agenda
+IS
+    v_disponibles NUMBER;
+    v_reservados  NUMBER;
+BEGIN
+    SELECT COUNT(CASE WHEN slot_status = 'AVAILABLE' THEN 1 END),
+           COUNT(CASE WHEN slot_status = 'BOOKED' THEN 1 END)
+    INTO v_disponibles, v_reservados
+    FROM schedule_slots
+    WHERE slot_date > TRUNC(SYSDATE)
+       OR (slot_date = TRUNC(SYSDATE)
+           AND start_time >= TO_CHAR(SYSDATE, 'HH24:MI:SS'));
+
+    DBMS_OUTPUT.PUT_LINE('=== RESUMEN DE AGENDA FUTURA ===');
+    DBMS_OUTPUT.PUT_LINE('Bloques disponibles: ' || v_disponibles);
+    DBMS_OUTPUT.PUT_LINE('Bloques reservados: ' || v_reservados);
+END prc_mostrar_resumen_agenda;
 /

@@ -44,13 +44,17 @@ CREATE OR REPLACE PACKAGE BODY pkg_agenda AS
         DBMS_OUTPUT.PUT_LINE('Fecha: ' || TO_CHAR(p_fecha, 'DD/MM/YYYY'));
 
         FOR r_slot IN (
-            SELECT schedule_slot_id, start_time, end_time
-            FROM schedule_slots
-            WHERE doctor_id = p_doctor_id
-              AND slot_date >= TRUNC(p_fecha)
-              AND slot_date < TRUNC(p_fecha) + 1
-              AND slot_status = 'AVAILABLE'
-            ORDER BY start_time
+            SELECT ss.schedule_slot_id, ss.start_time, ss.end_time
+            FROM schedule_slots ss
+            INNER JOIN doctors d ON d.doctor_id = ss.doctor_id
+            WHERE ss.doctor_id = p_doctor_id
+              AND d.active = 1
+              AND ss.slot_date >= GREATEST(TRUNC(p_fecha), TRUNC(SYSDATE))
+              AND ss.slot_date < TRUNC(p_fecha) + 1
+              AND (ss.slot_date > TRUNC(SYSDATE)
+                   OR ss.start_time >= TO_CHAR(SYSDATE, 'HH24:MI:SS'))
+              AND ss.slot_status = 'AVAILABLE'
+            ORDER BY ss.start_time
         ) LOOP
             v_encontrados := v_encontrados + 1;
             DBMS_OUTPUT.PUT_LINE(
@@ -74,11 +78,15 @@ CREATE OR REPLACE PACKAGE BODY pkg_agenda AS
 
         SELECT COUNT(*)
         INTO v_total
-        FROM schedule_slots
-        WHERE doctor_id = p_doctor_id
-          AND slot_date >= TRUNC(p_fecha)
-          AND slot_date < TRUNC(p_fecha) + 1
-          AND slot_status = 'AVAILABLE';
+        FROM schedule_slots ss
+        INNER JOIN doctors d ON d.doctor_id = ss.doctor_id
+        WHERE ss.doctor_id = p_doctor_id
+          AND d.active = 1
+          AND ss.slot_date >= GREATEST(TRUNC(p_fecha), TRUNC(SYSDATE))
+          AND ss.slot_date < TRUNC(p_fecha) + 1
+          AND (ss.slot_date > TRUNC(SYSDATE)
+               OR ss.start_time >= TO_CHAR(SYSDATE, 'HH24:MI:SS'))
+          AND ss.slot_status = 'AVAILABLE';
 
         RETURN v_total;
     END fn_contar_slots_disponibles;

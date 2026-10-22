@@ -1,3 +1,15 @@
+CREATE OR REPLACE TRIGGER trg_auditar_sentencia_cita
+AFTER INSERT OR UPDATE OR DELETE ON appointments
+BEGIN
+    INSERT INTO appointment_statement_audit (
+        table_name, operation_name, event_at, db_user
+    ) VALUES (
+        'APPOINTMENTS', ORA_SYSEVENT, SYSTIMESTAMP,
+        SYS_CONTEXT('USERENV', 'SESSION_USER')
+    );
+END trg_auditar_sentencia_cita;
+/
+
 CREATE OR REPLACE TRIGGER trg_validar_cita_antes_insert
 BEFORE INSERT ON appointments
 FOR EACH ROW

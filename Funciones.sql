@@ -15,6 +15,7 @@ BEGIN
     
     RETURN v_run_limpio;
 END fn_limpiar_run;
+/
 
 
 CREATE OR REPLACE FUNCTION fn_calcular_dv_run (
@@ -55,6 +56,7 @@ BEGIN
 
     RETURN v_dv;
 END fn_calcular_dv_run;
+/
 
 CREATE OR REPLACE FUNCTION fn_validar_run (
     p_run VARCHAR2
@@ -91,6 +93,7 @@ EXCEPTION
     WHEN OTHERS THEN
         RETURN 0;
 END fn_validar_run;
+/
 
 
 
@@ -110,6 +113,7 @@ BEGIN
 
     RETURN TO_CHAR(p_fecha, p_formato);
 END fn_formatear_fecha;
+/
 
 
 
@@ -137,3 +141,19 @@ BEGIN
 
     RETURN v_codigo;
 END fn_generar_codigo;
+/
+
+CREATE OR REPLACE FUNCTION fn_contar_pacientes_activos
+RETURN NUMBER
+IS
+    v_total NUMBER;
+BEGIN
+    SELECT COUNT(*)
+    INTO v_total
+    FROM users u
+    INNER JOIN patient_profiles pp ON pp.user_id = u.user_id
+    WHERE u.active = 1;
+
+    RETURN v_total;
+END fn_contar_pacientes_activos;
+/
